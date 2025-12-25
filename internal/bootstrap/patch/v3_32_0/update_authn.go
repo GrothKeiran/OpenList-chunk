@@ -11,15 +11,14 @@ import (
 func UpdateAuthnForOldVersion() {
 	users, _, err := op.GetUsers(1, -1)
 	if err != nil {
-		utils.Log.Errorf("[update authn for old version] failed get users: %v", err)
-		return
+		utils.Log.Fatalf("[update authn for old version] failed get users: %v", err)
 	}
 	for i := range users {
 		user := users[i]
 		if user.Authn == "" {
 			user.Authn = "[]"
 			if err := db.UpdateUser(&user); err != nil {
-				utils.Log.Errorf("[update authn for old version] failed update user: %v", err)
+				utils.Log.Fatalf("[update authn for old version] failed update user: %v", err)
 			}
 		}
 	}

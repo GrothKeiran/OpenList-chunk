@@ -24,6 +24,7 @@ func (d *Dropbox) refreshToken() error {
 			ErrorMessage string `json:"text"`
 		}
 		_, err := base.RestyClient.R().
+			SetHeader("User-Agent", "Mozilla/5.0 (Macintosh; Apple macOS 15_5) AppleWebKit/537.36 (KHTML, like Gecko) Safari/537.36 Chrome/138.0.0.0 Openlist/425.6.30").
 			SetResult(&resp).
 			SetQueryParams(map[string]string{
 				"refresh_ui": d.RefreshToken,
@@ -175,12 +176,12 @@ func (d *Dropbox) finishUploadSession(ctx context.Context, toPath string, offset
 	req.Header.Set("Content-Type", "application/octet-stream")
 	req.Header.Set("Authorization", "Bearer "+d.AccessToken)
 	if d.RootNamespaceId != "" {
-		apiPathRootJson, err := d.buildPathRootHeader()
-		if err != nil {
-			return err
-		}
-		req.Header.Set("Dropbox-API-Path-Root", apiPathRootJson)
+	apiPathRootJson, err := d.buildPathRootHeader()
+	if err != nil {
+	    return err
 	}
+	req.Header.Set("Dropbox-API-Path-Root", apiPathRootJson)
+}
 
 	uploadFinishArgs := UploadFinishArgs{
 		Commit: struct {
@@ -226,12 +227,12 @@ func (d *Dropbox) startUploadSession(ctx context.Context) (string, error) {
 	req.Header.Set("Content-Type", "application/octet-stream")
 	req.Header.Set("Authorization", "Bearer "+d.AccessToken)
 	if d.RootNamespaceId != "" {
-		apiPathRootJson, err := d.buildPathRootHeader()
-		if err != nil {
-			return "", err
-		}
-		req.Header.Set("Dropbox-API-Path-Root", apiPathRootJson)
+	apiPathRootJson, err := d.buildPathRootHeader()
+	if err != nil {
+	    return "", err
 	}
+	req.Header.Set("Dropbox-API-Path-Root", apiPathRootJson)
+}
 	req.Header.Set("Dropbox-API-Arg", "{\"close\":false}")
 
 	res, err := base.HttpClient.Do(req)
@@ -248,8 +249,9 @@ func (d *Dropbox) startUploadSession(ctx context.Context) (string, error) {
 }
 
 func (d *Dropbox) buildPathRootHeader() (string, error) {
-	return utils.Json.MarshalToString(map[string]interface{}{
-		".tag": "root",
-		"root": d.RootNamespaceId,
-	})
+    return utils.Json.MarshalToString(map[string]interface{}{
+        ".tag": "root",
+        "root": d.RootNamespaceId,
+    })
 }
+

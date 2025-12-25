@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/OpenListTeam/OpenList/v4/cmd/flags"
 	"github.com/OpenListTeam/OpenList/v4/drivers/base"
@@ -180,6 +181,40 @@ func CleanTempDir() {
 	for _, file := range files {
 		if err := os.RemoveAll(filepath.Join(conf.Conf.TempDir, file.Name())); err != nil {
 			log.Errorln("failed delete temp file: ", err)
+		}
+	}
+}
+
+// CleanStaleChunks removes upload chunks older than 30 minutes
+func CleanStaleChunks() {
+	chunkDir := filepath.Join(conf.Conf.TempDir, "chunks")
+	if !utils.Exists(chunkDir) {
+		return
+	}
+
+	entries, err := os.ReadDir(chunkDir)
+	if err != nil {
+		log.Errorf("failed to list chunks dir: %v", err)
+		return
+	}
+
+	threshold := time.Now().Add(-30 * time.Minute)
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue // Should only be directories (upload_ids)
+		}
+
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+
+		if info.ModTime().Before(threshold) {
+			path := filepath.Join(chunkDir, entry.Name())
+			log.Infof("[Cleanup] Removing stale chunk dir: %s (ModTime: %v)", entry.Name(), info.ModTime())
+			if err := os.RemoveAll(path); err != nil {
+				log.Errorf("[Cleanup] Failed to remove stale chunk dir %s: %v", entry.Name(), err)
+			}
 		}
 	}
 }

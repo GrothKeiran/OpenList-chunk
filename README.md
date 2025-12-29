@@ -32,6 +32,8 @@
 ---
 
 ## ⚙️ 部署指南
+## docker:部署
+docker run -d --name openlist -p 5244:5244 -v "/opt/openlist/data:/opt/openlist/data" --restart always lusiya/openlist-chunk:latest
 
 ### ⚠️ 编译警告
 **强烈不建议**在 Windows 下交叉编译 Linux 版本（由于 CGO 和 SQLite 的兼容性玄学问题）。

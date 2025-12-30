@@ -11,13 +11,13 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-      - name: Checkout Backend Code
+      - name: Checkout Backend
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      # 拉取官方前端代码
-      - name: Checkout Frontend Code
+      # 拉取官方前端源码
+      - name: Checkout Frontend
         uses: actions/checkout@v4
         with:
           repository: OpenListTeam/OpenList-Frontend
@@ -34,40 +34,36 @@ jobs:
         with:
           version: 8
 
-      - name: Build Frontend (Fix Chinese)
+      - name: Build Frontend with Chinese
         run: |
-          echo "进入前端目录..."
           cd frontend-src
-          
-          echo "安装依赖..."
+          echo "📥 安装前端依赖..."
           pnpm install --no-frozen-lockfile
-          
-          # --- [关键修复 1] 强制生成语言包 ---
-          echo "强制执行 i18n 翻译脚本..."
-          # 这里同时尝试多种可能的脚本命令，确保翻译文件被生成
-          node scripts/i18n.mjs || pnpm run i18n || echo "i18n 脚本执行尝试结束"
-          
-          # --- [关键修复 2] 暴力修改默认语言为中文 ---
-          # 这一步会修改源码，将默认的 'en' 替换为 'zh-CN'
-          echo "修改默认语言配置..."
-          # 尝试修改 i18n 配置文件 (根据常见路径尝试)
+
+          echo "🇨🇳 [Fix 1] 尝试生成语言包..."
+          # 尝试运行可能存在的 i18n 脚本
+          npm run i18n || node scripts/i18n.mjs || echo "跳过标准 i18n 脚本"
+
+          echo "🇨🇳 [Fix 2] 强制修改默认语言为简体中文 (zh-CN)..."
+          # 使用 sed 命令修改源码中的默认配置
+          # 将 fallbackLng: "en" 改为 "zh-CN"
+          # 将 wait: 'en' 改为 'zh-CN'
           if [ -f "src/app/i18n.ts" ]; then
-            sed -i 's/fallbackLng: "en"/fallbackLng: "zh-CN"/' src/app/i18n.ts
-            sed -i "s/wait: 'en'/wait: 'zh-CN'/" src/app/i18n.ts
-            echo "已修改 src/app/i18n.ts 默认语言为中文"
+            sed -i 's/fallbackLng: "en"/fallbackLng: "zh-CN"/g' src/app/i18n.ts
+            sed -i "s/wait: 'en'/wait: 'zh-CN'/g" src/app/i18n.ts
+            echo "✅ 已修改 src/app/i18n.ts"
+          else
+            echo "⚠️ 未找到 i18n.ts 文件，跳过修改"
           fi
-          
-          # --- [关键修复 3] 确保构建包含所有资源 ---
-          echo "开始构建前端..."
-          # 增加 CI=false 防止警告被当做错误中断构建
+
+          echo "🏗️ 开始构建前端..."
+          # CI=false 防止因警告停止构建
           CI=false pnpm build
-          
-          echo "移动构建产物..."
+
+          echo "📂 移动构建产物..."
           cd ..
           mkdir -p public/dist
-          # 确保清空旧文件
           rm -rf public/dist/*
-          # 复制新文件
           cp -r frontend-src/dist/* public/dist/
 
       - name: Setup Go

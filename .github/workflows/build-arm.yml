@@ -1,0 +1,85 @@
+name: Build ARM Binaries
+
+on:
+  workflow_dispatch:  # 允许手动点击按钮触发
+  push:
+    tags:
+      - 'v*' # 也就是当你推送 v1.0.0 这样的标签时自动触发
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # --- 第一步：编译前端 ---
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      - name: Build Frontend
+        run: |
+          echo "正在编译前端..."
+          cd OpenList-Frontend-main
+          pnpm install --no-frozen-lockfile
+          pnpm build
+          cd ..
+          # 将前端产物移动到后端指定的静态资源目录
+          echo "正在移动前端资源..."
+          mkdir -p public/dist
+          cp -r OpenList-Frontend-main/dist/* public/dist/
+
+      # --- 第二步：准备 Go 环境 ---
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23' # 根据 go.mod 保持较新版本
+
+      # --- 第三步：安装交叉编译工具 (关键) ---
+      # 因为 OpenList 通常依赖 SQLite (go-sqlite3)，它是 CGO 的，
+      # 所以必须安装 C 语言的交叉编译器，否则编译会报错。
+      - name: Install Cross-Compilers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu gcc-arm-linux-gnueabihf
+
+      # --- 第四步：编译 ARM64 (适用于树莓派4/5, NAS, 软路由等) ---
+      - name: Build for Linux ARM64
+        env:
+          CGO_ENABLED: 1
+          GOOS: linux
+          GOARCH: arm64
+          CC: aarch64-linux-gnu-gcc  # 指定 C 编译器
+        run: |
+          # -w -s 用于去除调试信息，减小体积
+          go build -ldflags "-w -s" -o openlist-linux-arm64 main.go
+
+      # --- 第五步：编译 ARMv7 (适用于老旧树莓派, 32位 ARM 设备) ---
+      - name: Build for Linux ARMv7
+        env:
+          CGO_ENABLED: 1
+          GOOS: linux
+          GOARCH: arm
+          GOARM: 7
+          CC: arm-linux-gnueabihf-gcc # 指定 C 编译器
+        run: |
+          go build -ldflags "-w -s" -o openlist-linux-arm-v7 main.go
+
+      # --- 第六步：上传编译结果 ---
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: openlist-arm-binaries
+          path: |
+            openlist-linux-arm64
+            openlist-linux-arm-v7

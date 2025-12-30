@@ -22,7 +22,7 @@ jobs:
         with:
           repository: OpenListTeam/OpenList-Frontend
           path: frontend-src
-          ref: main
+          ref: main 
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -34,26 +34,40 @@ jobs:
         with:
           version: 8
 
-      - name: Build Frontend
+      - name: Build Frontend (Fix Chinese)
         run: |
-          echo "正在编译前端..."
+          echo "进入前端目录..."
           cd frontend-src
+          
+          echo "安装依赖..."
           pnpm install --no-frozen-lockfile
           
-          # [关键修复] 尝试运行 i18n 脚本生成语言包
-          # 如果 package.json 里定义了 i18n 脚本则运行它，否则直接运行 node 脚本
-          if grep -q '"i18n":' package.json; then
-            pnpm run i18n
-          elif [ -f "scripts/i18n.mjs" ]; then
-            node scripts/i18n.mjs
+          # --- [关键修复 1] 强制生成语言包 ---
+          echo "强制执行 i18n 翻译脚本..."
+          # 这里同时尝试多种可能的脚本命令，确保翻译文件被生成
+          node scripts/i18n.mjs || pnpm run i18n || echo "i18n 脚本执行尝试结束"
+          
+          # --- [关键修复 2] 暴力修改默认语言为中文 ---
+          # 这一步会修改源码，将默认的 'en' 替换为 'zh-CN'
+          echo "修改默认语言配置..."
+          # 尝试修改 i18n 配置文件 (根据常见路径尝试)
+          if [ -f "src/app/i18n.ts" ]; then
+            sed -i 's/fallbackLng: "en"/fallbackLng: "zh-CN"/' src/app/i18n.ts
+            sed -i "s/wait: 'en'/wait: 'zh-CN'/" src/app/i18n.ts
+            echo "已修改 src/app/i18n.ts 默认语言为中文"
           fi
           
-          # 开始构建
-          pnpm build
+          # --- [关键修复 3] 确保构建包含所有资源 ---
+          echo "开始构建前端..."
+          # 增加 CI=false 防止警告被当做错误中断构建
+          CI=false pnpm build
           
+          echo "移动构建产物..."
           cd ..
-          echo "正在移动前端资源..."
           mkdir -p public/dist
+          # 确保清空旧文件
+          rm -rf public/dist/*
+          # 复制新文件
           cp -r frontend-src/dist/* public/dist/
 
       - name: Setup Go

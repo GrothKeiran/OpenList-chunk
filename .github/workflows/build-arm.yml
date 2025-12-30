@@ -16,14 +16,13 @@ jobs:
         with:
           fetch-depth: 0
 
-      # --- 新增步骤：拉取前端代码 ---
-      # 因为仓库里没有前端代码，我们需要从官方（或你自己的 Fork）拉取
+      # 拉取官方前端代码
       - name: Checkout Frontend Code
         uses: actions/checkout@v4
         with:
-          repository: OpenListTeam/OpenList-Frontend  # 如果你有修改前端，请改成你的仓库地址
-          path: frontend-src                          # 拉取到一个临时目录
-          ref: main                                   # 分支名，通常是 main
+          repository: OpenListTeam/OpenList-Frontend
+          path: frontend-src
+          ref: main
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -38,22 +37,25 @@ jobs:
       - name: Build Frontend
         run: |
           echo "正在编译前端..."
-          # 进入刚才拉取的前端目录
           cd frontend-src
-          
-          # 安装依赖并编译
           pnpm install --no-frozen-lockfile
+          
+          # [关键修复] 尝试运行 i18n 脚本生成语言包
+          # 如果 package.json 里定义了 i18n 脚本则运行它，否则直接运行 node 脚本
+          if grep -q '"i18n":' package.json; then
+            pnpm run i18n
+          elif [ -f "scripts/i18n.mjs" ]; then
+            node scripts/i18n.mjs
+          fi
+          
+          # 开始构建
           pnpm build
           
-          # 回到根目录
           cd ..
-          
-          # 将编译好的前端文件（位于 dist 目录）复制到后端需要的 public/dist 目录
           echo "正在移动前端资源..."
           mkdir -p public/dist
           cp -r frontend-src/dist/* public/dist/
 
-      # --- 之后的步骤保持不变 ---
       - name: Setup Go
         uses: actions/setup-go@v5
         with:

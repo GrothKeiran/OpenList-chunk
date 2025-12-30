@@ -1,4 +1,4 @@
-name: Build ARM Binaries
+name: Build ARM with Local Frontend
 
 on:
   workflow_dispatch:
@@ -11,18 +11,10 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-      - name: Checkout Backend Code
+      - name: Checkout Code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      # 拉取官方前端代码
-      - name: Checkout Frontend Code
-        uses: actions/checkout@v4
-        with:
-          repository: OpenListTeam/OpenList-Frontend
-          path: frontend-src
-          ref: main 
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -34,41 +26,55 @@ jobs:
         with:
           version: 8
 
-      - name: Build Frontend (Fix Chinese)
+      - name: Build Local Frontend
         run: |
-          echo "进入前端目录..."
-          cd frontend-src
-          
-          echo "安装依赖..."
-          pnpm install --no-frozen-lockfile
-          
-          # --- [关键修复 1] 强制生成语言包 ---
-          echo "强制执行 i18n 翻译脚本..."
-          # 这里同时尝试多种可能的脚本命令，确保翻译文件被生成
-          node scripts/i18n.mjs || pnpm run i18n || echo "i18n 脚本执行尝试结束"
-          
-          # --- [关键修复 2] 暴力修改默认语言为中文 ---
-          # 这一步会修改源码，将默认的 'en' 替换为 'zh-CN'
-          echo "修改默认语言配置..."
-          # 尝试修改 i18n 配置文件 (根据常见路径尝试)
-          if [ -f "src/app/i18n.ts" ]; then
-            sed -i 's/fallbackLng: "en"/fallbackLng: "zh-CN"/' src/app/i18n.ts
-            sed -i "s/wait: 'en'/wait: 'zh-CN'/" src/app/i18n.ts
-            echo "已修改 src/app/i18n.ts 默认语言为中文"
+          # 1. 寻找并进入前端目录
+          # 优先尝试 OpenList-Frontend-main，如果不存在则尝试 OpenList-Frontend
+          if [ -d "OpenList-Frontend-main" ]; then
+            cd OpenList-Frontend-main
+            echo "Found frontend in OpenList-Frontend-main"
+          elif [ -d "OpenList-Frontend" ]; then
+            cd OpenList-Frontend
+            echo "Found frontend in OpenList-Frontend"
+          else
+            echo "Error: 找不到前端目录，请检查仓库结构"
+            ls -R
+            exit 1
           fi
-          
-          # --- [关键修复 3] 确保构建包含所有资源 ---
+
+          # 2. 检查 package.json 是否存在 (关键排查)
+          if [ ! -f "package.json" ]; then
+            echo "Error: 当前目录下缺少 package.json，无法编译！"
+            ls -la
+            exit 1
+          fi
+
+          # 3. 安装依赖
+          echo "正在安装前端依赖..."
+          pnpm install --no-frozen-lockfile
+
+          # 4. [关键] 生成中文语言包
+          # OpenList 需要运行此脚本才能生成 lang/zh-CN/entry.ts 等文件
+          echo "正在生成语言包..."
+          if [ -f "scripts/i18n.mjs" ]; then
+            node scripts/i18n.mjs
+          else
+            # 尝试使用 pnpm 命令运行（如果有定义）
+            pnpm run i18n || echo "Warning: i18n 脚本执行失败或未找到，中文可能无法显示"
+          fi
+
+          # 5. 执行构建
           echo "开始构建前端..."
-          # 增加 CI=false 防止警告被当做错误中断构建
           CI=false pnpm build
-          
+
+          # 6. 移动产物到后端目录
           echo "移动构建产物..."
           cd ..
           mkdir -p public/dist
-          # 确保清空旧文件
+          # 清理可能存在的旧文件
           rm -rf public/dist/*
-          # 复制新文件
-          cp -r frontend-src/dist/* public/dist/
+          # 注意：根据 vite 配置，产物可能在 dist 目录
+          cp -r OpenList-Frontend-main/dist/* public/dist/ || cp -r OpenList-Frontend/dist/* public/dist/
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -80,16 +86,17 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y gcc-aarch64-linux-gnu gcc-arm-linux-gnueabihf
 
-      - name: Build for Linux ARM64
+      - name: Build Backend (ARM64)
         env:
           CGO_ENABLED: 1
           GOOS: linux
           GOARCH: arm64
           CC: aarch64-linux-gnu-gcc
         run: |
+          # 此时 public/dist 已包含我们刚才编译好的前端，直接编译后端即可
           go build -ldflags "-w -s" -o openlist-linux-arm64 main.go
 
-      - name: Build for Linux ARMv7
+      - name: Build Backend (ARMv7)
         env:
           CGO_ENABLED: 1
           GOOS: linux
@@ -102,7 +109,7 @@ jobs:
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: openlist-arm-binaries
+          name: openlist-arm-custom-frontend
           path: |
             openlist-linux-arm64
             openlist-linux-arm-v7
